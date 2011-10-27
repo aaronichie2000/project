@@ -1,2 +1,17 @@
 %The project is about voice recognition system implemented in matlab.
 %as part of my final year project for graduation.
+
+%The project follows the following order
+%(1) Preprocessing of the individual voice signal
+      %(a)Silence removal
+      %(b)Noise cancelling 
+
+%(2) Extraction of speaker features for system training
+      %(a)MFCC or
+      %(b)Dynamic time warping algorithm
+%(3) System training
+%(4) System testing 
+%(5) system verification
+      %(a)Neural network
+%Silence remove is added to remove silence from the speaker's voice
+
