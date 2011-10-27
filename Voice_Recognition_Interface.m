@@ -133,14 +133,14 @@ try
     ai=init_sound(R_fs,R_samp_len);
     R_fs = get(ai, 'SampleRate'); % to ensure cases that actual rate might not match desired
 catch
-    disp('no microphone detected')
+    msgbox('no microphone detected','Microphone','error')
     return                          % terminate where there is no mic
 end
 
 nogo=0;         % logic to control loop
 
 while not(nogo)
-    set(handles.textstatus,'string','Now Recording');
+    set(handles.textstatus,'string','Recording...');
     start(ai);
     try
         data =getdata(ai);
@@ -152,6 +152,12 @@ while not(nogo)
 end
 
 delete(ai)
+
+%------------------ remove silence ------------%
+[segments R_fs]=silenceRemove(wav_file);        
+signal=segments{1};
+%------------------
+
 
 %-------------------  normalize data to 99% of max  -----------------
 signal = 0.99*data/max(abs(data));
@@ -265,7 +271,7 @@ global R_fs
 % hObject    handle to play_button (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-if ~isempty(signal)                        % if error try use length(signal) ~=0
+if ~isempty(signal)                   % if error try use length(signal) ~=0
     sound(signal,R_fs)
 end
 set(handles.textstatus,'String','Now playing')
@@ -276,7 +282,7 @@ set(handles.textstatus,'String','Now playing')
 
 function load_button_Callback(hObject, eventdata, handles)
 global signal
-global wav_file
+global wav_file R_fs
 % hObject    handle to load_button (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
@@ -284,22 +290,28 @@ global wav_file
   if filename== 0
         errordlg('ERROR! Select a file !!!');
         return;
+  elseif ~strcmpi(filename(end-3:end),'.wav')
+      errordlg('ERROR: Bad file format. must be .wav');
+      return;
   end
   
   wav_file = [pathname filename];
-  if ~exist('wav_file')          %check for file existence
+  if ~exist('wav_file')                           %check for file existence
       errordlg('ERROR! File not found...');
       help pw;
       return;
   end
-  signal = wavread(wav_file);
+  %signal = wavread(wav_file);                    %replaced with the nxt line so that signal can pass through the noise remove function
+  [segments R_fs]=silenceRemove(wav_file);        %remove silence % assign segments
+  signal=segments{1};
   set(handles.textstatus,'string',wav_file);
-%   samp_len = length(signal)/16000;        %signal plotting now on function
+%   samp_len = length(signal)/16000;              %signal plotting now on function
 %     delta_t = 1/16000;
 %     t=0:delta_t:(samp_len-delta_t);
 axes(handles.time_domain_plot)
 sig_plot;
 set(handles.play_button,'enable','on')
+set(handles.save_button,'enable','on')
 guidata(hObject, handles);
 %---------------------------------------------------------------------
 % --- Executes on button press in save_button.
