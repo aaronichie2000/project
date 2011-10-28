@@ -140,8 +140,10 @@ end
 nogo=0;         % logic to control loop
 
 while not(nogo)
-    set(handles.textstatus,'string','Recording...');
+    set(handles.textstatus,'string','countdown wait');
+    pause(3);    % wait for 5 sec for user  
     start(ai);
+    set(handles.textstatus,'string','Speak now...');
     try
         data =getdata(ai);
         nogo=1;
@@ -153,19 +155,20 @@ end
 
 delete(ai)
 
-%------------------ remove silence ------------%
-[segments R_fs]=silenceRemove(wav_file);        
-signal=segments{1};
-%------------------
+wavwrite(data,R_fs,'newuser');
 
 
 %-------------------  normalize data to 99% of max  -----------------
+
 signal = 0.99*data/max(abs(data));
 %z_data = data;              % make a copy of data for later usage
 
+%------------------ remove silence ------------%
+[segments R_fs]=silenceRemove('newuser');        
+signal=segments{1};
 
-set(handles.textstatus,'ForegroundColor',[1 0 0],'String','Recording...')
-set(handles.textstatus,'ForegroundColor',[1 0 0],'String','Done')
+set(handles.textstatus,'String','Recording...')
+set(handles.textstatus,'String','Done')
 % enabling the play button 
 set(handles.play_button,'enable','on');
 
@@ -225,10 +228,10 @@ guidata(hObject, handles);                   %updates the handles
 set(gca,'YDir','normal')
 
  %---------------------------display in image ------------------
-figure
-imagesc(t,f,log_data), xlabel('Distribution'), ylabel('Distribution');
+% figure
+% imagesc(t,f,log_data), xlabel('Distribution'), ylabel('Distribution');
 
-
+guidata(hObject, handles);
 
 %---------------------------- RECORDING SUBFUNCTION ---------------------------
 % It initializes mic input for the voice fs=sampling rate samp_len= time to
@@ -302,8 +305,8 @@ global wav_file R_fs
       return;
   end
   %signal = wavread(wav_file);                    %replaced with the nxt line so that signal can pass through the noise remove function
-  [segments R_fs]=silenceRemove(wav_file);        %remove silence % assign segments
-  signal=segments{1};
+ [segments R_fs]=silenceRemove(wav_file);        %remove silence % assign segments
+ signal=segments{1};
   set(handles.textstatus,'string',wav_file);
 %   samp_len = length(signal)/16000;              %signal plotting now on function
 %     delta_t = 1/16000;
