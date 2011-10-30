@@ -1,12 +1,13 @@
 %--------------------------------------------------------------------------
 %         WRITTEN BY AARON NICHIE AS PART OF FINAL YEAR PROJECT
 %--------------------------------------------------------------------------
+%%
 function varargout = Voice_Recognition_Interface(varargin)
 global signal RECT s_plot   %global variable to hold voice data
 global recording_duration   %value to be shown text box
 global mfcc_file R_fs           %to hold mfcc after processing to keep original
 global wav_file
-
+global filt_signal
 %VOICE_RECOGNITION_INTERFACE M-file for Voice_Recognition_Interface.fig
 %      VOICE_RECOGNITION_INTERFACE, by itself, creates a new VOICE_RECOGNITION_INTERFACE or raises the existing
 %      singleton*.
@@ -30,7 +31,7 @@ global wav_file
 
 % Edit the above text to modify the response to help Voice_Recognition_Interface
 
-% Last Modified by GUIDE v2.5 20-Oct-2011 16:22:28
+% Last Modified by GUIDE v2.5 29-Oct-2011 11:52:09
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -49,13 +50,15 @@ if nargout
 else
     gui_mainfcn(gui_State, varargin{:});
 end
+
+end
 % End initialization code - DO NOT EDIT
 
-
+%%
 % --- Executes just before Voice_Recognition_Interface is made visible.
 function Voice_Recognition_Interface_OpeningFcn(hObject, eventdata, handles, varargin)
 global recording_duration
-global mfcc_file
+
 recording_duration=1;
 % This function has no output args, see OutputFcn.
 % hObject    handle to figure
@@ -70,10 +73,12 @@ handles.output = hObject;
 % Update handles structure
 guidata(hObject, handles);
 
+end
+
 % UIWAIT makes Voice_Recognition_Interface wait for user response (see UIRESUME)
 % uiwait(handles.figure1);
 
-
+%%
 % --- Outputs from this function are returned to the command line.
 function varargout = Voice_Recognition_Interface_OutputFcn(hObject, eventdata, handles)
 % varargout  cell array for returning output args (see VARARGOUT);
@@ -84,7 +89,23 @@ function varargout = Voice_Recognition_Interface_OutputFcn(hObject, eventdata, h
 % Get default command line output from handles structure
 varargout{1} = handles.output;
 
+set(gcf,'CloseRequestFcn',@interface_closefcn)
+set(handles.textstatus,'string','WELCOME')
+end
 
+function interface_closefcn(src,evnt)
+selection = questdlg('Want to QUIT??','Confirmation',...
+      'Yes','No','Yes'); 
+   switch selection, 
+      case 'Yes',
+%          save('');    to be implemented to save b4 close interface
+         delete(gcf)
+      case 'No'
+      return 
+   end
+end
+
+%%
 %-----------------------------------------------------------------%
 %---         use slider to set maximum recording time             %
 %-----------------------------------------------------------------%
@@ -103,7 +124,7 @@ sliderDis_to_box=['Recording set to ' num2str(sliderVal) ' (sec)'];
                                                                                         %forsamp=num2str(sliderVal);
 set(handles.sliderIndicator,'string',sliderDis_to_box)
                                                                                         %set(handles.textstatus,'string',forsamp)
-
+end
 % --- Executes during object creation, after setting all properties.
 function slider1_CreateFcn(hObject, eventdata, handles)
 % hObject    handle to slider1 (see GCBO)
@@ -117,13 +138,16 @@ end
 set(hObject,'Min',1,'Max',6)
 set(hObject,'Value',2)
 
+end
 
+%%
 %------------------------  get data from mic ----------------------
 
 
 % --- Executes on button press in record_button.
 function record_button_Callback(hObject, eventdata, handles)
  global signal R_fs                                                                                     %R_samp_len=str2num(get(handles.textstatus,'string'));
+ global filt_signal
  R_fs=16000;             % may consider globalizing 
 R_samp_len=get(handles.slider1,'Value');
 % hObject    handle to record_button (see GCBO)
@@ -140,8 +164,23 @@ end
 nogo=0;         % logic to control loop
 
 while not(nogo)
-    set(handles.textstatus,'string','countdown wait');
-    pause(3);    % wait for 5 sec for user  
+%     realtime
+
+%------------------------------------------------
+% countdown initialization function handles nested down 
+%------------------------------------------------
+secs = 5;
+mins=0;
+secs = secs + rem(mins,1)*60;
+mins = floor(mins);
+
+    endMssg = 'Speak now...';
+timerobj = timer('timerfcn',@updateDisplay,'period',1,'executionmode','fixedrate');
+secsElapsed = 0;
+start(timerobj);
+%------------------------------------------------
+ 
+    pause(5);    % wait for 3 sec for user  
     start(ai);
     set(handles.textstatus,'string','Speak now...');
     try
@@ -166,9 +205,13 @@ signal = 0.99*data/max(abs(data));
 %------------------ remove silence ------------%
 [segments R_fs]=silenceRemove('newuser');        
 signal=segments{1};
-
-set(handles.textstatus,'String','Recording...')
+filt_signal=noise_filter(signal);
 set(handles.textstatus,'String','Done')
+
+%---------- time object deleted ---- 
+stop(timerobj);
+delete(timerobj);
+% ----------------------------------
 % enabling the play button 
 set(handles.play_button,'enable','on');
 
@@ -231,8 +274,25 @@ set(gca,'YDir','normal')
 % figure
 % imagesc(t,f,log_data), xlabel('Distribution'), ylabel('Distribution');
 
+
 guidata(hObject, handles);
 
+%-----------------------------------------------------------
+%handles for the time implemented here bcos of nesting error
+%-----------------------------------------------------------
+
+  function updateDisplay(varargin)
+        secsElapsed = secsElapsed + 1;
+        if secsElapsed > secs + mins*60
+            set(handles.textstatus,'string',endMssg);
+            set(handles.textstatus,'foregroundcolor',1-get(handles.textstatus,'foregroundcolor')); %,'backgroundcolor',1-get(edtbox,'backgroundcolor')
+        else
+            set(handles.textstatus,'string',...
+                datestr([2003  10  24  12  mins  secs-secsElapsed],'MM:SS'));
+        end
+    end
+end
+%%
 %---------------------------- RECORDING SUBFUNCTION ---------------------------
 % It initializes mic input for the voice fs=sampling rate samp_len= time to
 % record in seconds
@@ -263,8 +323,8 @@ set(ai, 'TriggerDelayUnits', 'seconds');
 set(ai, 'SamplesPerTrigger', actual_fs*samp_len+1);
 set(ai, 'TimeOut', 10);
 %--------------------------------------------------------------------
-
-
+end
+%%
 %--------------------------------------------------------------------
 
 % --- Executes on button press in play_button.
@@ -280,12 +340,13 @@ end
 set(handles.textstatus,'String','Now playing')
 %set(handles.textstatus,'String','  ')
 % --- Executes on button press in load_button.
-
+end
 %---------------------------------------------------------------------
-
+%%
 function load_button_Callback(hObject, eventdata, handles)
 global signal
 global wav_file R_fs
+global filt_signal
 % hObject    handle to load_button (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
@@ -307,6 +368,7 @@ global wav_file R_fs
   %signal = wavread(wav_file);                    %replaced with the nxt line so that signal can pass through the noise remove function
  [segments R_fs]=silenceRemove(wav_file);        %remove silence % assign segments
  signal=segments{1};
+ filt_signal=noise_filter(signal);
   set(handles.textstatus,'string',wav_file);
 %   samp_len = length(signal)/16000;              %signal plotting now on function
 %     delta_t = 1/16000;
@@ -316,7 +378,9 @@ sig_plot;
 set(handles.play_button,'enable','on')
 set(handles.save_button,'enable','on')
 guidata(hObject, handles);
+end
 %---------------------------------------------------------------------
+%%
 % --- Executes on button press in save_button.
 function save_button_Callback(hObject, eventdata, handles)
 global R_fs
@@ -328,8 +392,12 @@ global signal
 if filename ~=0
     wavwrite(signal,R_fs,[pathname filename])
 end
-%---------------------------------------------------------------------
 
+end
+%%
+%---------------------------------------------------------------------
+% functions without callbacks
+%---------------------------------------------------------------------
 function sig_plot()
 global signal
 samp_len = length(signal)/16000;
@@ -340,4 +408,5 @@ plot(t,signal);
 title('time domain display of voice sampled at FS=16000')
 xlabel('time (sec)');
 ylabel('Amplitude');
-% 
+end
+%--------------------------------------------------------------------
