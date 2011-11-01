@@ -7,11 +7,12 @@ function [segments, fs] = silenceRemove(wavFileName,t)
 % 	return;
 % end 
 % fclose(fp);
-
+x=wavFileName;
+fs=16000;
 % Check if .wav extension exists:
 % if  (strcmpi(wavFileName(end-3:end),'.wav'))
 %     % read the wav file name:
-      [x,fs] = wavread(wavFileName);
+%       [x,fs] = wavread(wavFileName);
 % else
 %     fprintf('Unknown file type!\n');
 %     return;

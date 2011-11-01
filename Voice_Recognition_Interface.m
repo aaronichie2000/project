@@ -31,7 +31,7 @@ global filt_signal
 
 % Edit the above text to modify the response to help Voice_Recognition_Interface
 
-% Last Modified by GUIDE v2.5 29-Oct-2011 11:52:09
+% Last Modified by GUIDE v2.5 31-Oct-2011 20:54:00
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -70,14 +70,100 @@ recording_duration=1;
 % Choose default command line output for Voice_Recognition_Interface
 handles.output = hObject;
 
+%(1)-----------------------------------------------
+handles.adaptor = 'winsound';
+handles.id      = 0;
+handles.chan    = 1;
+
+handles.samplesPerTrigger = 1024;
+handles.sampleRate = 44100;
+handles.numTraces = 10;   % number of traces to show in the waterfall.
+handles.cycleTime = .9;   % Proportional to the amount of time spent per
+                          %  visualization on CycleAll setting.
+                          
+                          
+axes(handles.realtimeaxis);
+handles.hLine1 = plot(zeros(1,handles.samplesPerTrigger)'); 
+set(handles.hLine1,'Color', [.1 .1 0.5]);
+set(handles.realtimeaxis,'Color',[235/255 255/255 235/255])
+set(handles.realtimeaxis,'XGrid','on','YGrid','on')
+set(handles.realtimeaxis,'YLim',[-0.5 0.5]);
+t=title('Time Domain Signal','Color',[.05 .05 .25],'FontWeight','Bold','FontSize',9);
+xlabel('Time (s)','FontSize',8);
+ylabel('Voltage (V)','FontSize',8);
+
+ai=localSetupAI(handles);
+handles.ai = ai;
+%---------------------------------------------------------------------
 % Update handles structure
 guidata(hObject, handles);
 
+%(2)--------------------------------------------------------------------
+localStartAI(ai);
+%------------------------------------------------------
 end
 
 % UIWAIT makes Voice_Recognition_Interface wait for user response (see UIRESUME)
 % uiwait(handles.figure1);
 
+%%
+%(3)---------------------------
+function localStartAI(ai)
+start(ai);
+trigger(ai);
+end
+
+function localStopAI(ai)
+stop(ai);
+delete(ai);
+end
+%-------------------------------
+%%
+%(4)-------------------------------------------------------------------------------------------
+function ai=localSetupAI(handles)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% ++++ S E T U P   T H E   A N A L O G   I N P U T ++++
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Object Configuration.
+% Create an analog input object with one channel.
+ai = analoginput(handles.adaptor, handles.id);
+addchannel(ai, handles.chan);
+
+% Configure the callback to update the display.
+set(ai, 'TimerFcn', @localfftShowData);
+
+% Configure the analog input object.
+set(ai, 'SampleRate', handles.sampleRate);
+set(ai, 'SamplesPerTrigger', handles.samplesPerTrigger);
+set(ai, 'TriggerRepeat', 1);
+set(ai, 'TriggerType', 'manual');
+
+% Initialize callback parameters.  The TimerAction is initialized 
+% after figure has been created.
+set(ai, 'TimerPeriod', 0.01);  
+set(ai, 'BufferingConfig',[handles.samplesPerTrigger*2,20]);
+
+% Initialize time and frequency plots with lines of y=0
+d=zeros(1,handles.samplesPerTrigger);
+time = 1:handles.samplesPerTrigger;
+f=1:handles.samplesPerTrigger/2;
+mag=zeros(1,handles.samplesPerTrigger/2);
+
+% Store state information in the analog input objects UserData area.
+data.storedFFTsIndex = 1;
+data.plotSurf        = 0;
+data.ai              = ai;
+data.getdata         = [d time];
+data.handle          = [];
+data.figureHandles   = handles;
+data.view            = [103 10];
+data.rotateStep      = 4;
+data.counter         = 0;
+
+% Set the object's UserData to data.
+set(data.ai, 'UserData', data);
+end
+%--------------------------------------------------------------------------------------------------------------
 %%
 % --- Outputs from this function are returned to the command line.
 function varargout = Voice_Recognition_Interface_OutputFcn(hObject, eventdata, handles)
@@ -89,8 +175,12 @@ function varargout = Voice_Recognition_Interface_OutputFcn(hObject, eventdata, h
 % Get default command line output from handles structure
 varargout{1} = handles.output;
 
-set(gcf,'CloseRequestFcn',@interface_closefcn)
+% realtime
+
 set(handles.textstatus,'string','WELCOME')
+
+set(gcf,'CloseRequestFcn',@interface_closefcn)
+% set(gcbf,'DeleteFcn',@delete_fcn)
 end
 
 function interface_closefcn(src,evnt)
@@ -105,11 +195,14 @@ selection = questdlg('Want to QUIT??','Confirmation',...
    end
 end
 
+% function delete_fcn(src,evnt)
+% Voice_Recognition_Interface('close');
+% end
+
 %%
 %-----------------------------------------------------------------%
 %---         use slider to set maximum recording time             %
 %-----------------------------------------------------------------%
-
 % --- Executes on slider movement.
 function slider1_Callback(hObject, eventdata, handles)
 %global sliderVal
@@ -142,11 +235,9 @@ end
 
 %%
 %------------------------  get data from mic ----------------------
-
-
 % --- Executes on button press in record_button.
 function record_button_Callback(hObject, eventdata, handles)
- global signal R_fs                                                                                     %R_samp_len=str2num(get(handles.textstatus,'string'));
+global signal R_fs                                                                                     %R_samp_len=str2num(get(handles.textstatus,'string'));
  global filt_signal
  R_fs=16000;             % may consider globalizing 
 R_samp_len=get(handles.slider1,'Value');
@@ -164,8 +255,6 @@ end
 nogo=0;         % logic to control loop
 
 while not(nogo)
-%     realtime
-
 %------------------------------------------------
 % countdown initialization function handles nested down 
 %------------------------------------------------
@@ -174,7 +263,7 @@ mins=0;
 secs = secs + rem(mins,1)*60;
 mins = floor(mins);
 
-    endMssg = 'Speak now...';
+endMssg = 'Speak now...';
 timerobj = timer('timerfcn',@updateDisplay,'period',1,'executionmode','fixedrate');
 secsElapsed = 0;
 start(timerobj);
@@ -187,14 +276,13 @@ start(timerobj);
         data =getdata(ai);
         nogo=1;
     catch
-        disp('Time elapsed...try again');
+        set(handles.textstatus,'string','Time elapsed..try again');
         stop(ai);
     end
 end
 
 delete(ai)
-
-wavwrite(data,R_fs,'newuser');
+% wavwrite(data,R_fs,'newuser');
 
 
 %-------------------  normalize data to 99% of max  -----------------
@@ -202,10 +290,10 @@ wavwrite(data,R_fs,'newuser');
 signal = 0.99*data/max(abs(data));
 %z_data = data;              % make a copy of data for later usage
 
-%------------------ remove silence ------------%
-[segments R_fs]=silenceRemove('newuser');        
-signal=segments{1};
-filt_signal=noise_filter(signal);
+
+[segments R_fs]=silenceRemove(data);   %----- remove silence --and segments--signal-------%
+signal=segments{1};                    %----- pick first segment----%
+filt_signal=noise_filter(signal);      %----- filter the voice segment -%
 set(handles.textstatus,'String','Done')
 
 %---------- time object deleted ---- 
@@ -222,14 +310,7 @@ set(handles.save_button,'enable','on');
 %  time domain display
 %-----------------------------------------------
 axes(handles.time_domain_plot)
-% samp_len = length(signal)/16000;
-% delta_t = 1/16000;
-% t=0:delta_t:(samp_len-delta_t);
-%plot(handles.time_domain_plot,t,signal);
 sig_plot
-% title('time display of voice sampled at FS=16000')
-% xlabel('time (sec)');
-% ylabel('Amplitude');
 guidata(hObject, handles);                           %update handles
                                                          
 %--------------------------------------
@@ -260,14 +341,12 @@ x_len = size(X,2);  %for num of columns
 t = ((window_width-1)/2:step_size:(x_len-1)*step_size+(window_width-1)/2)/R_fs;
                 %------ display on GUI --------
 log_data=-log10(X+0.0001);
-
 axes(handles.frequency_domain_plot)
 plot(t,X);
 title('Spectral Distribution of Voice signal');
 xlabel('Frequency (Hz)');
 ylabel('Amplitude');
 guidata(hObject, handles);                   %updates the handles
-%plot(handles.frequency_domain_plot,t,X);
 set(gca,'YDir','normal')
 
  %---------------------------display in image ------------------
@@ -290,7 +369,8 @@ guidata(hObject, handles);
             set(handles.textstatus,'string',...
                 datestr([2003  10  24  12  mins  secs-secsElapsed],'MM:SS'));
         end
-    end
+  end
+
 end
 %%
 %---------------------------- RECORDING SUBFUNCTION ---------------------------
@@ -338,7 +418,6 @@ if ~isempty(signal)                   % if error try use length(signal) ~=0
     sound(signal,R_fs)
 end
 set(handles.textstatus,'String','Now playing')
-%set(handles.textstatus,'String','  ')
 % --- Executes on button press in load_button.
 end
 %---------------------------------------------------------------------
@@ -365,14 +444,11 @@ global filt_signal
       help pw;
       return;
   end
-  %signal = wavread(wav_file);                    %replaced with the nxt line so that signal can pass through the noise remove function
- [segments R_fs]=silenceRemove(wav_file);        %remove silence % assign segments
- signal=segments{1};
- filt_signal=noise_filter(signal);
-  set(handles.textstatus,'string',wav_file);
-%   samp_len = length(signal)/16000;              %signal plotting now on function
-%     delta_t = 1/16000;
-%     t=0:delta_t:(samp_len-delta_t);
+signal = wavread(wav_file);                    %replaced with the nxt line so that signal can pass through the noise remove function
+[segments R_fs]=silenceRemove(signal);        %remove silence % assign segments
+signal=segments{1};
+filt_signal=noise_filter(signal);
+set(handles.textstatus,'string',wav_file,'FontSize',16);
 axes(handles.time_domain_plot)
 sig_plot;
 set(handles.play_button,'enable','on')
@@ -392,7 +468,6 @@ global signal
 if filename ~=0
     wavwrite(signal,R_fs,[pathname filename])
 end
-
 end
 %%
 %---------------------------------------------------------------------
@@ -403,10 +478,44 @@ global signal
 samp_len = length(signal)/16000;
 delta_t = 1/16000;
 t=0:delta_t:(samp_len-delta_t);
-%plot(handles.time_domain_plot,t,signal);
 plot(t,signal);
 title('time domain display of voice sampled at FS=16000')
 xlabel('time (sec)');
 ylabel('Amplitude');
 end
 %--------------------------------------------------------------------
+%--------------------------------------------------------------------
+%(5)
+function localfftShowData(obj,event)
+
+if (get(obj,'SamplesAvailable') >= obj.SamplesPerTrigger)
+	
+	% Get the handles.
+	data = obj.UserData;
+	
+	handles = data.figureHandles;
+	% Execute a peekdata.
+	x = peekdata(obj, obj.SamplesPerTrigger);
+    
+	% Dynamically modify Analog axis as we go.
+	maxX=max(x);
+	minX=min(x);
+   
+	yax1=get(handles.realtimeaxis,'YLim');
+    
+    if minX<yax1(1),
+        yax1(1)=minX;
+    end
+    if maxX>yax1(2),
+        yax1(2)=maxX;
+    end 	
+    set(handles.realtimeaxis,'YLim',yax1)
+ 	set(handles.realtimeaxis,'XLim',[0 (obj.SamplesPerTrigger-1)/obj.SampleRate])
+		
+	% Update the line plots.
+	set(handles.hLine1,'XData', (0:(obj.SamplesPerTrigger-1))/obj.SampleRate, 'YData', x(:,1));
+	
+	set(data.ai, 'UserData', data);
+	drawnow;
+end
+end
