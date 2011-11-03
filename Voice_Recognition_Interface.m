@@ -31,7 +31,7 @@ global filt_signal
 
 % Edit the above text to modify the response to help Voice_Recognition_Interface
 
-% Last Modified by GUIDE v2.5 31-Oct-2011 20:54:00
+% Last Modified by GUIDE v2.5 03-Nov-2011 11:33:21
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -86,8 +86,7 @@ axes(handles.realtimeaxis);
 handles.hLine1 = plot(zeros(1,handles.samplesPerTrigger)'); 
 set(handles.hLine1,'Color', [.1 .1 0.5]);
 set(handles.realtimeaxis,'Color',[235/255 255/255 235/255])
-set(handles.realtimeaxis,'XGrid','on','YGrid','on')
-set(handles.realtimeaxis,'YLim',[-0.5 0.5]);
+set(handles.realtimeaxis,'XGrid','on','YGrid','on');
 t=title('Time Domain Signal','Color',[.05 .05 .25],'FontWeight','Bold','FontSize',9);
 xlabel('Time (s)','FontSize',8);
 ylabel('Voltage (V)','FontSize',8);
@@ -113,10 +112,6 @@ start(ai);
 trigger(ai);
 end
 
-function localStopAI(ai)
-stop(ai);
-delete(ai);
-end
 %-------------------------------
 %%
 %(4)-------------------------------------------------------------------------------------------
@@ -144,6 +139,7 @@ set(ai, 'TimerPeriod', 0.01);
 set(ai, 'BufferingConfig',[handles.samplesPerTrigger*2,20]);
 
 % Initialize time and frequency plots with lines of y=0
+
 d=zeros(1,handles.samplesPerTrigger);
 time = 1:handles.samplesPerTrigger;
 f=1:handles.samplesPerTrigger/2;
@@ -175,8 +171,6 @@ function varargout = Voice_Recognition_Interface_OutputFcn(hObject, eventdata, h
 % Get default command line output from handles structure
 varargout{1} = handles.output;
 
-% realtime
-
 set(handles.textstatus,'string','WELCOME')
 
 set(gcf,'CloseRequestFcn',@interface_closefcn)
@@ -195,8 +189,10 @@ selection = questdlg('Want to QUIT??','Confirmation',...
    end
 end
 
-% function delete_fcn(src,evnt)
-% Voice_Recognition_Interface('close');
+% function delete_fcn(obj,event)
+% interfaceHandle=Voice_Recognition_Interface;
+% handles=guidata(interfaceHandle);
+% localStopAI(handles.ai);
 % end
 
 %%
@@ -218,6 +214,7 @@ sliderDis_to_box=['Recording set to ' num2str(sliderVal) ' (sec)'];
 set(handles.sliderIndicator,'string',sliderDis_to_box)
                                                                                         %set(handles.textstatus,'string',forsamp)
 end
+
 % --- Executes during object creation, after setting all properties.
 function slider1_CreateFcn(hObject, eventdata, handles)
 % hObject    handle to slider1 (see GCBO)
@@ -238,8 +235,8 @@ end
 % --- Executes on button press in record_button.
 function record_button_Callback(hObject, eventdata, handles)
 global signal R_fs                                                                                     %R_samp_len=str2num(get(handles.textstatus,'string'));
- global filt_signal
- R_fs=16000;             % may consider globalizing 
+global filt_signal
+R_fs=16000;             % may consider globalizing 
 R_samp_len=get(handles.slider1,'Value');
 % hObject    handle to record_button (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
@@ -269,20 +266,26 @@ secsElapsed = 0;
 start(timerobj);
 %------------------------------------------------
  
-    pause(5);    % wait for 3 sec for user  
-    start(ai);
+      
+   
+    pause(5);    % wait for 5 sec for user
     set(handles.textstatus,'string','Speak now...');
+    start(ai);
     try
+        
         data =getdata(ai);
         nogo=1;
     catch
-        set(handles.textstatus,'string','Time elapsed..try again');
+        set(handles.textstatus,'string','try again');
+        disp('Time elapsed... Try again')
         stop(ai);
+        stop(timerobj);
     end
 end
 
 delete(ai)
-% wavwrite(data,R_fs,'newuser');
+stop(timerobj);
+delete(timerobj);
 
 
 %-------------------  normalize data to 99% of max  -----------------
@@ -294,11 +297,13 @@ signal = 0.99*data/max(abs(data));
 [segments R_fs]=silenceRemove(data);   %----- remove silence --and segments--signal-------%
 signal=segments{1};                    %----- pick first segment----%
 filt_signal=noise_filter(signal);      %----- filter the voice segment -%
+feature=melcepst(filt_signal,R_fs);
+
 set(handles.textstatus,'String','Done')
 
-%---------- time object deleted ---- 
-stop(timerobj);
-delete(timerobj);
+%---------- time object deleted --------------------------- 
+% stop(timerobj);
+% delete(timerobj);
 % ----------------------------------
 % enabling the play button 
 set(handles.play_button,'enable','on');
@@ -311,43 +316,45 @@ set(handles.save_button,'enable','on');
 %-----------------------------------------------
 axes(handles.time_domain_plot)
 sig_plot
+
 guidata(hObject, handles);                           %update handles
-                                                         
+                        
+
 %--------------------------------------
 % frequency domain display
 %---------------------------------------
-fft_pts=2048;                                     % num of fourier points
-%spec = 'wideband'
-spec = 'narrowband';                             %----------------------
-wideband_time = 4e-3;                            % consider to globalize
-narrowband_time = 25e-3;                         %----------------------
-    % Sampling rate dependent on window width 
-if strcmp(spec,'narrowband')
-    window_width=round(R_fs*narrowband_time);
-    step_size=round(window_width/8);
-elseif strcmp(spec,'wideband')
-    window_width = round(R_fs*wideband_time);
-    step_size = round(window_width/2);
-end
-     %------- calculate the spectrum --------------
-X = specgram(signal,fft_pts,1,hamming(window_width),window_width-step_size);
-X=abs(X);
-
-y_len = size(X,1);  % for num of rows       %----------------------
-f = (0:y_len-1)*R_fs/y_len/2;                 % frequency axis vector
-f=f/1000;        % converting freq to kHz   %----------------------
-
-x_len = size(X,2);  %for num of columns    
-t = ((window_width-1)/2:step_size:(x_len-1)*step_size+(window_width-1)/2)/R_fs;
-                %------ display on GUI --------
-log_data=-log10(X+0.0001);
-axes(handles.frequency_domain_plot)
-plot(t,X);
-title('Spectral Distribution of Voice signal');
-xlabel('Frequency (Hz)');
-ylabel('Amplitude');
-guidata(hObject, handles);                   %updates the handles
-set(gca,'YDir','normal')
+% fft_pts=2048;                                     % num of fourier points
+% %spec = 'wideband'
+% spec = 'narrowband';                             %----------------------
+% wideband_time = 4e-3;                            % consider to globalize
+% narrowband_time = 25e-3;                         %----------------------
+%     % Sampling rate dependent on window width 
+% if strcmp(spec,'narrowband')
+%     window_width=round(R_fs*narrowband_time);
+%     step_size=round(window_width/8);
+% elseif strcmp(spec,'wideband')
+%     window_width = round(R_fs*wideband_time);
+%     step_size = round(window_width/2);
+% end
+%      %------- calculate the spectrum --------------
+% X = specgram(signal,fft_pts,1,hamming(window_width),window_width-step_size);
+% X=abs(X);
+% 
+% y_len = size(X,1);  % for num of rows       %----------------------
+% f = (0:y_len-1)*R_fs/y_len/2;                 % frequency axis vector
+% f=f/1000;        % converting freq to kHz   %----------------------
+% 
+% x_len = size(X,2);  %for num of columns    
+% t = ((window_width-1)/2:step_size:(x_len-1)*step_size+(window_width-1)/2)/R_fs;
+%                 %------ display on GUI --------
+% log_data=-log10(X+0.0001);
+% axes(handles.frequency_domain_plot)
+% plot(t,X);
+% title('Spectral Distribution of Voice signal');
+% xlabel('Frequency (Hz)');
+% ylabel('Amplitude');
+% guidata(hObject, handles);                   %updates the handles
+% set(gca,'YDir','normal')
 
  %---------------------------display in image ------------------
 % figure
@@ -494,21 +501,25 @@ if (get(obj,'SamplesAvailable') >= obj.SamplesPerTrigger)
 	data = obj.UserData;
 	
 	handles = data.figureHandles;
+    
 	% Execute a peekdata.
 	x = peekdata(obj, obj.SamplesPerTrigger);
+    
     
 	% Dynamically modify Analog axis as we go.
 	maxX=max(x);
 	minX=min(x);
    
 	yax1=get(handles.realtimeaxis,'YLim');
+    yax1(1)=minX - 0.1; % need to subtract a value to make sure yax(1) never equals yax(2)
+	yax1(2)=maxX + 0.1;
     
-    if minX<yax1(1),
-        yax1(1)=minX;
-    end
-    if maxX>yax1(2),
-        yax1(2)=maxX;
-    end 	
+%     if minX<yax1(1),
+%         yax1(1)=minX;
+%     end
+%     if maxX>yax1(2),
+%         yax1(2)=maxX;
+%     end 	
     set(handles.realtimeaxis,'YLim',yax1)
  	set(handles.realtimeaxis,'XLim',[0 (obj.SamplesPerTrigger-1)/obj.SampleRate])
 		
@@ -518,4 +529,19 @@ if (get(obj,'SamplesAvailable') >= obj.SamplesPerTrigger)
 	set(data.ai, 'UserData', data);
 	drawnow;
 end
+end
+
+
+% --- Executes on button press in all_exit.
+function all_exit_Callback(hObject, eventdata, handles)
+% hObject    handle to all_exit (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+localStopai(handles.ai);
+closereq;
+end
+
+function localStopai(ai)
+stop(ai);
+delete(ai);
 end
